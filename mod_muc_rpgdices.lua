@@ -46,6 +46,7 @@ function roll(dices)
   local result = {}
   result.dice = {}
   result.final = 0
+  local final_mod = 0
 
   module:log("debug", "roll(): %s %s %s + %s", dices.times, dices.rolltype, dices.sides, dices.bonus);
 
@@ -86,11 +87,33 @@ function roll(dices)
         result.final = result.final + math.floor((result.dice[i] + dices.bonus) / dices.threshold)
       end
     end
+
+  -- world of darkness roll
+  elseif dices.rolltype == 'w' then
+    local more = 0
+    for i = 1, dices.times do
+      if result.dice[i] == dices.sides then
+        more = more + 1
+      elseif result.dice[i] == 1 then
+        final_mod = final_mod - 1
+      end
+    end
+    for i = 1, more do
+      result.dice[dices.times + i] = dice(dices.sides, dices.rolltype)
+      module:log("debug", "roll(): more=%s", result.dice[i]);
+    end
+    for i = 1, dices.times + more do
+      if result.dice[i] >= dices.threshold then
+        result.final = result.final + 1
+      end
+    end
   end
 
-  if dices.rolltype ~= 's' then
-    result.final = result.final + dices.bonus
+  -- except shadowrun roll
+  if dices.rolltype ~= 's' and dices.rolltype ~= 'w' then
+    final_mod = dices.bonus
   end
+  result.final = result.final + final_mod
 
   module:log("debug", "roll(): %s", result.final);
 
@@ -115,7 +138,7 @@ function format_dices(dices)
     final = final..dices.times
   end
 
-  if dices.rolltype ~= 's' then
+  if dices.rolltype ~= 's' and dices.rolltype ~= 'w' then
     final = final..dices.rolltype..dices.sides
   else
     final = final..dices.rolltype..dices.threshold
@@ -247,7 +270,7 @@ function parse_sr_submessage(submessage)
   local sep = submessage:find("[sS]");
   if not sep then return; end
   local mod = submessage:find("[+-]");
-  module:log("info", "parse_sr_submessage(): sep=%s / mod=%s", sep, mod);
+  module:log("debug", "parse_sr_submessage(): sep=%s / mod=%s", sep, mod);
 
   dices.times = tonumber(submessage:sub(1, sep-1))
 
@@ -294,6 +317,56 @@ function parse_sr_message(message)
   return result_final;
 end
 
+-- White Wolf v1 roll
+--
+function parse_wod_submessage(submessage)
+  local dices = {}
+  dices.times = 1
+  dices.sides = 10
+  dices.threshold = 8
+  dices.bonus = 0
+  dices.rolltype = 'w'
+
+  local sep = submessage:find("[wW]");
+  if not sep then return; end
+  module:log("debug", "parse_wod_submessage(): sep=%s", sep);
+
+  dices.times = tonumber(submessage:sub(1, sep-1))
+  dices.threshold = tonumber(submessage:sub(sep+1))
+
+  if dices.times > 10 then dices.times = 10 end
+  if dices.times < 1 then dices.times = 1 end
+
+  if dices.threshold > 10 then dices.threshold = 10 end
+  if dices.threshold < 2 then dices.threshold = 2 end
+
+  module:log("debug", "parse_wod_submessage(): %s/%s%s%s+%s(WoD%s)", submessage, dices.times, dices.rolltype, dices.sides, dices.bonus, dices.threshold);
+
+  return dices
+end
+
+function parse_wod_message(message)
+  local submessage = message:gsub(' ', '')
+  module:log("debug", "parse_wod_message(): submessage=%s", submessage);
+
+  local dices = parse_wod_submessage(submessage)
+  if not dices then return nil; end
+
+  local result = ''
+  local result_final = ''
+  local score_final = 0;
+  local position
+
+  result = roll(dices)
+  result_final = result_final..format_dices(dices).."="..format_result(result).."\n"
+  score_final = score_final + result.final
+
+  module:log("info", "parse_wod_message(): result_final=%s", result_final)
+  module:log("info", "parse_wod_message(): score_final=%s", score_final)
+
+  return result_final;
+end
+
 --function print_r(tab, pad)
 --  pad = pad or ''
 --  for index,value in pairs(tab) do
@@ -319,6 +392,7 @@ end
 function send_roll_help(this_room, from_room, from_room_jid, from_host)
   local result = 'Roll RPG Dices\n'..
   '/sr => the Shadowrun roll help\n'..
+  '/wod => the World of Darkness roll help\n'..
   '/roll => this help\n'..
   '/roll ROLL[+ROLL...]\n'..
   '\n'..
@@ -329,7 +403,7 @@ function send_roll_help(this_room, from_room, from_room_jid, from_host)
   '  k = keep lower dice only\n'..
   '  K = keep higher dice only\n'..
   'Y = sides of dice (2 to 1000)\n'..
-  'Z = modifier (-1000 to +1000)\n'..
+  'Z = modifier (-1000 to +1000), optional\n'..
   '\n'..
   'examples:\n'..
   '/roll 20\n'..
@@ -349,14 +423,15 @@ end
 function send_sr_help(this_room, from_room, from_room_jid, from_host)
   local result = 'Roll Shadowrun Dices\n'..
   '/roll => the classic roll help\n'..
+  '/wod => the World of Darkness roll help\n'..
   '/sr => this help\n'..
   '/sr ROLL\n'..
   '\n'..
   'a ROLL is XsY+Z\n'..
   'X = number of 6 sides dices (1 to 25)\n'..
-  's = type of roll (s)\n'..
-  'Y = threshold\n'..
-  'Z = modifier (-10 to +10)\n'..
+  's = type of roll (always s for "shadowrun")\n'..
+  'Y = threshold (2 to 20)\n'..
+  'Z = modifier (-10 to +10), optional\n'..
   '\n'..
   'examples:\n'..
   '/sr 8s4\n'..
@@ -365,6 +440,27 @@ function send_sr_help(this_room, from_room, from_room_jid, from_host)
   '/sr 3s5+1\n'..
   '3s5+1=[ 1 7 4 ]=> 2\n';
   send_result(this_room, from_room, from_room_jid, from_host, "Shadowrun Dices", result)
+end
+
+function send_wod_help(this_room, from_room, from_room_jid, from_host)
+  local result = 'Roll World of Darkness Dices\n'..
+  '/roll => the classic roll help\n'..
+  '/sr => the Shadowrun help\n'..
+  '/wod => this help\n'..
+  '/wod ROLL\n'..
+  '\n'..
+  'a ROLL is XwY\n'..
+  'X = number of 10 sides dices (1 to 10)\n'..
+  'w = type of roll (always w for "world of darkness")\n'..
+  'Y = threshold (2 to 10)\n'..
+  '\n'..
+  'examples:\n'..
+  '/wod 8w7\n'..
+  '8w7=[ 9 3 7 5 5 4 8 2 ]=> 3\n'..
+  '\n'..
+  '/wod 20w8\n'..
+  '10w8=[ 8 4 8 3 10 7 7 3 6 1 3 ]=> 2\n';
+  send_result(this_room, from_room, from_room_jid, from_host, "World of Darkness Dices", result)
 end
 
 function check_message(event)
@@ -391,17 +487,19 @@ function check_message(event)
   local body = stanza:get_child("body");
   if not body then return; end
   body = body and body:get_text();
-  module:log("info", "check_message(): %s", body);
+  module:log("info", "check_message(): body=%s", body);
 
   local nick = stanza:get_child("nick", "http://jabber.org/protocol/nick");
   if not nick then return; end
   nick = nick and nick:get_text();
-  module:log("info", "check_message(): %s", nick);
+  module:log("info", "check_message(): nick=%s", nick);
 
   if body:match("^/roll$") then
     send_roll_help(this_room, from_room, from_room_jid, from_host)
   elseif body:match("^/sr$") then
     send_sr_help(this_room, from_room, from_room_jid, from_host)
+  elseif body:match("^/wod$") then
+    send_wod_help(this_room, from_room, from_room_jid, from_host)
   end
 
 -- TODO: rework all regex matching
@@ -414,12 +512,20 @@ function check_message(event)
     result = parse_roll_message(message);
   else
     message = body:match("^/sr (.*)");
-    if not message then return; end
+    if message then
+      message = message:gsub("^%s*(.-)%s*$", "%1");
+      module:log("debug", "check_message(): %s", message);
 
-    message = message:gsub("^%s*(.-)%s*$", "%1");
-    module:log("debug", "check_message(): %s", message);
+      result = parse_sr_message(message);
+    else
+      message = body:match("^/wod (.*)");
+      if not message then return; end
 
-    result = parse_sr_message(message);
+      message = message:gsub("^%s*(.-)%s*$", "%1");
+      module:log("debug", "check_message(): %s", message);
+
+      result = parse_wod_message(message);
+    end
   end
 
   if not result then return; end

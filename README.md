@@ -30,6 +30,17 @@ A ROLL is `XsY+Z with
  - `Y` = threshold
  - `Z` = modifier (-10 to +10), optional
 
+The syntax for World of Darnkess v1 rolls is:
+```
+/wod
+/wod ROLL
+```
+
+A ROLL is `XwY with
+ - `X` = number of 10 sides dices (1 to 10)
+ - `w` = type of roll (always w for "world of darkness")
+ - `Y` = threshold
+
 ## Installation
 
 Drop the module to Prosody dir (usually `/usr/lib/prosody/modules` or `/usr/local/lib/prosody/modules`) and turn it on in your config. Help to [Installing modules](https://prosody.im/doc/installing_modules).
@@ -78,3 +89,8 @@ sr 3s5+1
 3s5+1=[ 1 7 4 ]=> 2
 ```
 
+A World of Darkness v1 roll:
+```
+/wod 8w7
+8w7=[ 9 3 7 5 5 4 8 2 ]=> 3
+```
