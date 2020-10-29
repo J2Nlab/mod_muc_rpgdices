@@ -3,20 +3,32 @@
 
 This is a module for Prosody that adds `/roll` command to every MUC.
 
-The syntax is:
+The syntax for classic rolls is:
 ```
 /roll
 /roll ROLL[+ROLL...]
 ```
 
 A ROLL is `XdY+Z`, with
- - `X` = number of dices (1 to 10), optional
+ - `X` = number of dices (1 to 25), optional
  - `d` = type of roll (d, k or K), optional
    - d = classic roll, sum of all dices
    - k = keep lower dice only
    - K = keep higher dice only
  - `Y` = sides of dice (2 to 1000)
  - `Z` = modifier (-1000 to +1000), optional
+
+The syntax for Shadowrun rolls is:
+```
+/sr
+/sr ROLL
+```
+
+A ROLL is `XsY+Z with
+ - `X` = number of 6 sides dices (1 to 25)
+ - `s` = type of roll (always s for "shadowrun")
+ - `Y` = threshold
+ - `Z` = modifier (-10 to +10), optional
 
 ## Installation
 
@@ -53,3 +65,16 @@ Roll a lot of dices and sum all of them:
 d10+2=[ 7 ]=> 9
 => 31
 ```
+
+A simple Shadowrun roll:
+```
+/sr 8s4
+8s4=[ 4 10 4 2 4 1 1 3 ]=> 5
+```
+
+A Shadowrun roll with bonus:
+```
+sr 3s5+1
+3s5+1=[ 1 7 4 ]=> 2
+```
+
